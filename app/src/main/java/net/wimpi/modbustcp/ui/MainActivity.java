@@ -41,6 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText editAddress;
     private Button modifyButton;
     private Button postButton;
+    private TextView tvStatus;
 
 //    public static final String IP_ADDRESS= "192.168.100.52";
     public static final String IP_ADDRESS= "192.168.137.1";
@@ -57,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
         editAddress = findViewById(R.id.edit_address);
         modifyButton = findViewById(R.id.modify_button);
         postButton = findViewById(R.id.post_button);
+        tvStatus = findViewById(R.id.text_status_detail);
 
         //prepare a process image
         initListener();
@@ -72,6 +74,8 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 TcpReceiveThread.getInstance().disconnect();
                 address = editAddress.getText().toString();
+                tvModbusText.setText("");
+                tvStatus.setText("");
                 createTcp();
             }
         });
@@ -147,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onServerDisconnected(IOException e) {
                 Log.d(TAG,"server Disconnected" + e.getMessage());
+                tvStatus.setText("连接超时:" + e.toString());
                 TcpReceiveThread.getInstance().reconnect();
             }
 

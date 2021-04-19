@@ -83,7 +83,7 @@ public class TcpReceiveThread {
                 socket = new Socket(ipAddress, port);
 //                    socket.setSoTimeout ( 2 * 1000 );//设置超时时间
 //                    socket.setKeepAlive(true);//keepAlive保活机制
-                mHandler.postDelayed(heartBeatRunnable,HEART_BEAT_RATE);
+//                mHandler.postDelayed(heartBeatRunnable,HEART_BEAT_RATE);
                 if (isConnected()) {
                     TcpReceiveThread.getInstance().ipAddress = ipAddress;
                     TcpReceiveThread.getInstance().port = port;
@@ -93,7 +93,7 @@ public class TcpReceiveThread {
                     outputStream = socket.getOutputStream();
                     inputStream = socket.getInputStream();
                     receive();
-                    sendMessage("");
+//                    sendMessage("");
                     Log.i(TAG, "连接成功");
                 } else {
                     Log.i(TAG, "连接失败");
