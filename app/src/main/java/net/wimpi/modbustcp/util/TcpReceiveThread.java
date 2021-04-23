@@ -48,7 +48,8 @@ public class TcpReceiveThread {
     //创建工作队列，用于存放提交的等待执行任务
     BlockingQueue<Runnable> workQueue = new ArrayBlockingQueue<Runnable>(2);
     private Handler mHandler = new Handler();
-    private static final long HEART_BEAT_RATE = 60 * 1000;
+    private static final long HEART_BEAT_RATE = 10 * 1000;
+    private long sendTime = 0L;
 
 
     private ExecutorService mThreadPoolExecutor = new ThreadPoolExecutor(corePoolSize,
@@ -56,7 +57,7 @@ public class TcpReceiveThread {
             keepAliveTime,
             unit,
             workQueue,
-            new ThreadPoolExecutor.AbortPolicy());
+            new ThreadPoolExecutor.DiscardPolicy());
 
     //    构造函数私有化
     private TcpReceiveThread() {
@@ -80,10 +81,12 @@ public class TcpReceiveThread {
         public void run() {
             super.run();
             try {
-                socket = new Socket(ipAddress, port);
+                if (socket == null) {
+                    socket = new Socket(ipAddress, port);
 //                    socket.setSoTimeout ( 2 * 1000 );//设置超时时间
-//                    socket.setKeepAlive(true);//keepAlive保活机制
-//                mHandler.postDelayed(heartBeatRunnable,HEART_BEAT_RATE);
+//                socket.setKeepAlive(true);//keepAlive保活机制
+                }
+                mHandler.postDelayed(heartBeatRunnable,HEART_BEAT_RATE);
                 if (isConnected()) {
                     TcpReceiveThread.getInstance().ipAddress = ipAddress;
                     TcpReceiveThread.getInstance().port = port;
@@ -93,7 +96,6 @@ public class TcpReceiveThread {
                     outputStream = socket.getOutputStream();
                     inputStream = socket.getInputStream();
                     receive();
-//                    sendMessage("");
                     Log.i(TAG, "连接成功");
                 } else {
                     Log.i(TAG, "连接失败");
@@ -137,7 +139,7 @@ public class TcpReceiveThread {
 //                获取接收到的字节和字节数
                 int length = inputStream.read(bt);
 //                获取正确的字节
-                if (length>=0) {
+                if (length >= 0) {
                     byte[] bs = new byte[length];
                     System.arraycopy(bt, 0, bs, 0, length);
 
@@ -202,6 +204,21 @@ public class TcpReceiveThread {
         }
     }
 
+    public void setNull(){
+        try {
+            if (outputStream != null){
+                outputStream.close();
+            }
+            if (checkIsAlive()) {
+                socket.close();
+            }
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
     //    TCP回调
     private TcpReceiveListener tcpReceiveListener;
 
@@ -260,8 +277,8 @@ public class TcpReceiveThread {
             Log.i(TAG, "上次心跳成功时间" + TimeUtils.date2String(lastKeepAliveOkTime));
             Date now = Calendar.getInstance().getTime();
             long between = (now.getTime() - lastKeepAliveOkTime.getTime());
-            if (between > 60 * 1000) {
-                Log.i(TAG, "心跳异常超过1分钟，重新连接：");
+            if (between > 10 * 1000) {
+                Log.i(TAG, "心跳异常超过10秒，重新连接：");
                 lastKeepAliveOkTime = null;
                 socket = null;
                 mHandler.removeCallbacks(heartBeatRunnable);
@@ -276,44 +293,64 @@ public class TcpReceiveThread {
         }
     }
     
-    private Runnable heartBeatRunnable = new Runnable() {
+    private final Runnable heartBeatRunnable = new Runnable() {
         @Override
         public void run() {
-            keepAlive();
-            mHandler.postDelayed(this,HEART_BEAT_RATE);
+            if (System.currentTimeMillis() - sendTime >= HEART_BEAT_RATE) {
+                boolean isSuccess = sendMessage("");
+                Log.d(TAG,String.valueOf(isSuccess));
+                if (!isSuccess) {
+                    Log.d(TAG, TAG + "run: sendTime");
+                    mHandler.removeCallbacks(heartBeatRunnable);
+                    disconnect();
+                    reconnect();
+//                }
+                }
+//            keepAlive();
+            }
+            mHandler.postDelayed(this, HEART_BEAT_RATE);
         }
+
     };
 
-    private  boolean checkIsAlive() {
-        if (socket == null) {
-            return false;
-        } else {
-            try {
-                socket.sendUrgentData(0xFF);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return true;
-        }
-    }
-
-    public void sendMessage(String msg){
-        if (!checkIsAlive())
-            return;
-        Log.i(TAG,"准备发送消息:" +msg);
-        if (socket != null && socket.isConnected()){
-            if (!socket.isOutputShutdown()){
+        private boolean checkIsAlive() {
+            if (socket == null) {
+                return false;
+            } else {
                 try {
-                    PrintWriter outSteam = new PrintWriter(new BufferedWriter(
-                            new OutputStreamWriter(socket.getOutputStream())),true);
-                    outSteam.print(msg + (char)13 + (char)10);
-                    outSteam.flush();
-                    lastKeepAliveOkTime = Calendar.getInstance().getTime();
-                    Log.i(TAG,"发送成功");
+                    socket.sendUrgentData(0xFF);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+                return true;
             }
         }
-    }
+
+        public Boolean sendMessage(final String msg) {
+            if (!checkIsAlive())
+                return false;
+            Log.i(TAG, "准备发送消息:" + msg);
+            if (socket.isConnected() && !socket.isOutputShutdown()) {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        OutputStream os = null;
+                        try {
+                            os = socket.getOutputStream();
+                            String message = msg + "\r\n";
+                            os.write(message.getBytes());
+                            os.flush();
+                            lastKeepAliveOkTime = Calendar.getInstance().getTime();
+                            sendTime = System.currentTimeMillis();
+                            Log.i(TAG, "发送成功" + sendTime);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }).start();
+            } else {
+                return false;
+            }
+            return true;
+        }
 }

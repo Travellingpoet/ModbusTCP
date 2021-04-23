@@ -1,7 +1,13 @@
 package net.wimpi.modbustcp.ui;
 
 
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -18,7 +24,9 @@ import net.wimpi.modbus.procimg.SimpleDigitalOut;
 import net.wimpi.modbus.procimg.SimpleInputRegister;
 import net.wimpi.modbus.procimg.SimpleProcessImage;
 import net.wimpi.modbus.procimg.SimpleRegister;
+import net.wimpi.modbustcp.IBackService;
 import net.wimpi.modbustcp.R;
+import net.wimpi.modbustcp.util.SocketService;
 import net.wimpi.modbustcp.util.TcpReceiveThread;
 
 import java.io.ByteArrayOutputStream;
@@ -42,12 +50,15 @@ public class MainActivity extends AppCompatActivity {
     private Button modifyButton;
     private Button postButton;
     private TextView tvStatus;
+    private Intent mServiceIntent;
+    private IBackService iBackService;
 
 //    public static final String IP_ADDRESS= "192.168.100.52";
-    public static final String IP_ADDRESS= "192.168.137.1";
+//    public static final String IP_ADDRESS= "192.168.137.1";
+    public static final String IP_ADDRESS= "10.14.2.81";
     private String address = "";
 
-    int port = 8090;//Android 1024 以下端口属于系统端口，需要root权限
+    int port = 60000;//Android 1024 以下端口属于系统端口，需要root权限
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,10 +73,13 @@ public class MainActivity extends AppCompatActivity {
 
         //prepare a process image
         initListener();
+        //通过服务的方式实现心跳机制
+//        mServiceIntent = new Intent(this,SocketService.class);
 
 //        createModbusTcp();
 
         createTcp();
+
     }
 
     private void initListener(){
@@ -73,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 TcpReceiveThread.getInstance().disconnect();
+//                SocketService.getInstance().disconnect();
                 address = editAddress.getText().toString();
                 tvModbusText.setText("");
                 tvStatus.setText("");
@@ -86,7 +101,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
     private void createModbusTcp(){
         spi = new SimpleProcessImage();
 //        //线圈寄存器
@@ -141,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        Log.d(TAG,receicedMessage);
                         tvModbusText.setText(receicedMessage + "\n"
                                 + String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
 //                        tvModbusText1.setText(String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
@@ -152,11 +167,12 @@ public class MainActivity extends AppCompatActivity {
             public void onServerDisconnected(IOException e) {
                 Log.d(TAG,"server Disconnected" + e.getMessage());
                 tvStatus.setText("连接超时:" + e.toString());
-                TcpReceiveThread.getInstance().reconnect();
+                TcpReceiveThread.getInstance().setNull();
             }
 
             @Override
             public void onServerConnected() {
+                tvStatus.setText("");
                 Log.d(TAG,"server connected");
             }
 
@@ -340,6 +356,61 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return result;
+    }
+
+    private void registerReceiver(){
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(SocketService.HEART_BEAT_ACTION);
+        intentFilter.addAction(SocketService.MESSAGE_ACTION);
+        registerReceiver(mReceiver,intentFilter);
+    }
+
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action.equals(SocketService.MESSAGE_ACTION)){
+                String receicedMessage = intent.getStringExtra("message");
+                Log.d(TAG,receicedMessage);
+                tvModbusText.setText(receicedMessage + "\n"
+                        + String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
+            }else if (action.equals(SocketService.HEART_BEAT_ACTION)){
+               tvModbusText.setText("正常心跳");
+            }
+        }
+    };
+
+    private ServiceConnection conn = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            //已连接
+            iBackService = IBackService.Stub.asInterface(iBinder);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            //未连接为空
+            iBackService = null;
+        }
+    };
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+//        bindService(mServiceIntent,conn,BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+//        unregisterReceiver(mReceiver);
+//        unbindService(conn);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
     }
 }
 
