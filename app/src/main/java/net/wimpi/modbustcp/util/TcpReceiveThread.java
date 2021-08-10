@@ -3,6 +3,8 @@ package net.wimpi.modbustcp.util;
 import android.os.Handler;
 import android.util.Log;
 
+import net.wimpi.modbustcp.bean.MessageBean;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -297,7 +299,9 @@ public class TcpReceiveThread {
         @Override
         public void run() {
             if (System.currentTimeMillis() - sendTime >= HEART_BEAT_RATE) {
-                boolean isSuccess = sendMessage("");
+                MessageBean msg = new MessageBean();
+                msg.setAck_connect("OK");
+                boolean isSuccess = sendMessage(msg);
                 Log.d(TAG,String.valueOf(isSuccess));
                 if (!isSuccess) {
                     Log.d(TAG, TAG + "run: sendTime");
@@ -326,7 +330,7 @@ public class TcpReceiveThread {
             }
         }
 
-        public Boolean sendMessage(final String msg) {
+        public Boolean sendMessage(final MessageBean msg) {
             if (!checkIsAlive())
                 return false;
             Log.i(TAG, "准备发送消息:" + msg);
@@ -337,7 +341,7 @@ public class TcpReceiveThread {
                         OutputStream os = null;
                         try {
                             os = socket.getOutputStream();
-                            String message = msg + "\r\n";
+                            String message = "\r\n" + msg.toString() + "\r\n";
                             os.write(message.getBytes());
                             os.flush();
                             lastKeepAliveOkTime = Calendar.getInstance().getTime();

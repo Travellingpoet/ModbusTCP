@@ -26,7 +26,11 @@ import net.wimpi.modbus.procimg.SimpleProcessImage;
 import net.wimpi.modbus.procimg.SimpleRegister;
 import net.wimpi.modbustcp.IBackService;
 import net.wimpi.modbustcp.R;
+import net.wimpi.modbustcp.bean.ConnectionInfo;
+import net.wimpi.modbustcp.interfaces.IConnectionManager;
+import net.wimpi.modbustcp.util.ManagerHolder;
 import net.wimpi.modbustcp.util.SocketService;
+import net.wimpi.modbustcp.util.SocketUtil;
 import net.wimpi.modbustcp.util.TcpReceiveThread;
 
 import java.io.ByteArrayOutputStream;
@@ -52,13 +56,16 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
     private Intent mServiceIntent;
     private IBackService iBackService;
+    private ConnectionInfo mConnectionInfo;
+    private IConnectionManager mManager;
 
 //    public static final String IP_ADDRESS= "192.168.100.52";
 //    public static final String IP_ADDRESS= "192.168.137.1";
-    public static final String IP_ADDRESS= "10.14.2.81";
+    public static final String IP_ADDRESS= "10.14.2.81";//测试用IP地址
     private String address = "";
 
-    int port = 60000;//Android 1024 以下端口属于系统端口，需要root权限
+//    int port = 8090;//Android 1024 以下端口属于系统端口，需要root权限
+    int port = 60000;//测试用端口号
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
     private void createModbusTcp(){
+
         spi = new SimpleProcessImage();
 //        //线圈寄存器
 //        spi.addDigitalOut(new SimpleDigitalOut(true));
@@ -146,42 +154,56 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void createTcp(){
+        mConnectionInfo = new ConnectionInfo(IP_ADDRESS,port);
+        mManager = SocketUtil.open(mConnectionInfo);
+        connectedStatus();
 //        TcpReceiveThread.getInstance().connect("192.168.100.1",8090);
-        TcpReceiveThread.getInstance().connect("".equals(address) ? IP_ADDRESS : address ,port);
-        TcpReceiveThread.getInstance().setTcpReceiveListener(new TcpReceiveThread.TcpReceiveListener() {
-            @Override
-            public void onRealData(final String receicedMessage) {
-                Log.d(TAG,receicedMessage);
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.d(TAG,receicedMessage);
-                        tvModbusText.setText(receicedMessage + "\n"
-                                + String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
-//                        tvModbusText1.setText(String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
-                    }
-                });
-            }
+//        TcpReceiveThread.getInstance().connect("".equals(address) ? IP_ADDRESS : address ,port);
+//        TcpReceiveThread.getInstance().setTcpReceiveListener(new TcpReceiveThread.TcpReceiveListener() {
+//            @Override
+//            public void onRealData(final String receicedMessage) {
+//                Log.d(TAG,receicedMessage);
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        Log.d(TAG,receicedMessage);
+//                        tvModbusText.setText(receicedMessage + "\n"
+//                                + String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
+////                        tvModbusText1.setText(String.format("服务器连接状态：%s",TcpReceiveThread.getInstance().isConnected()?"已连接":"未连接"));
+//                    }
+//                });
+//            }
+//
+//            @Override
+//            public void onServerDisconnected(IOException e) {
+//                Log.d(TAG,"server Disconnected" + e.getMessage());
+//                tvStatus.setText("连接超时:" + e.toString());
+//                TcpReceiveThread.getInstance().setNull();
+//            }
+//
+//            @Override
+//            public void onServerConnected() {
+//                tvStatus.setText("");
+//                Log.d(TAG,"server connected");
+//            }
+//
+//            @Override
+//            public void onServerReconnectError() {
+//                Log.d(TAG,"onServerReconnectError");
+//                TcpReceiveThread.getInstance().connect(IP_ADDRESS,port);
+//            }
+//        });
+    }
 
-            @Override
-            public void onServerDisconnected(IOException e) {
-                Log.d(TAG,"server Disconnected" + e.getMessage());
-                tvStatus.setText("连接超时:" + e.toString());
-                TcpReceiveThread.getInstance().setNull();
-            }
-
-            @Override
-            public void onServerConnected() {
-                tvStatus.setText("");
-                Log.d(TAG,"server connected");
-            }
-
-            @Override
-            public void onServerReconnectError() {
-                Log.d(TAG,"onServerReconnectError");
-                TcpReceiveThread.getInstance().connect(IP_ADDRESS,port);
-            }
-        });
+    private void connectedStatus(){
+        if (mManager == null){
+            return;
+        }
+        if (!mManager.isConnect()) {
+            mManager.connect();
+        }else {
+            mManager.disconnect();
+        }
     }
 
     /**
